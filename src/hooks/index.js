@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { collection, query, where } from "firebase/firestore";
-import { firebase } from "../firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 import { collatedTasksExist } from "../helpers";
 import moment from "moment";
 
@@ -9,28 +9,18 @@ export const useTasks = selectedProject => {
   const [archivedTasks, setArchivedTasks] = useState([]);
 
   useEffect(() => {
-    // const ref =  collection(db, 'tasks');
-    // const q = query(ref, where('userId', '==', 'lksdjfIUEWRKksdmeiewKDKS'));
+    const tasksRef = collection(db, 'tasks');
+    let updatedQuery = query(tasksRef, where('userId', '==', 'lksdjfIUEWRKksdmeiewKDKS'));
 
-    let unsubscribe = firebase
-          .firestore()
-          .collection('tasks')
-          .where('userId', '==', 'lksdjfIUEWRKksdmeiewKDKS');
+    if (selectedProject && !collatedTasksExist(selectedProject)) {
+      updatedQuery = query(updatedQuery, where('projectId', '==', selectedProject));
+    } else if (selectedProject === 'TODAY') {
+      updatedQuery = query(updatedQuery, where('date', '==', moment().format('DD/MM/YYYY')));
+    } else if (selectedProject === 'INBOX' || selectedProject === 0) {
+      updatedQuery = query(updatedQuery, where('date', '==', ''));
+    }
 
-    unsubscribe = 
-      selectedProject && !collatedTasksExist(selectedProject)
-        ? (unsubscribe = unsubscribe.where('projectId', '==', selectedProject))
-        : selectedProject === 'TODAY'
-        ? (unsubscribe = unsubscribe.where(
-            'date',
-            '==',
-            moment().format('DD/MM/YYYY')
-          ))
-        : selectedProject === 'INBOX' || selectedProject === 0
-        ? (unsubscribe = unsubscribe.where('date', '==', ''))
-        : unsubscribe;
-
-    unsubscribe = unsubscribe.onSnapshot(snapshot => {
+    const unsubscribe = onSnapshot(updatedQuery, snapshot => {
       const newTasks = snapshot.docs.map(task => ({
         id: task.id,
         ...task.data(),
@@ -52,4 +42,27 @@ export const useTasks = selectedProject => {
   }, [selectedProject]);
 
   return { tasks, archivedTasks };
+};
+
+export const useProjects = () => {
+  const [projects, setProjects] = useState([]);
+  const projectRef =  collection(db, 'projects');
+  const projectQuery = query(projectRef, where('userId', '==', 'lksdjfIUEWRKksdmeiewKDKS'));
+
+  useEffect(() => {
+      projectQuery.orderBy('projectId')
+      .get()
+      .then(snapshot => {
+        const allProjects = snapshot.docs.map(project => ({
+          ...project.data(),
+          docId: project.id,
+        }));
+
+        if (JSON.stringify(allProjects) !== JSON.stringify(projects)) {
+          setProjects(allProjects);
+        }
+      });
+  }, [projects]);
+
+  return { projects, setProjects };
 };
